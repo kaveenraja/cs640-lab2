@@ -24,6 +24,7 @@ parser.add_argument('-t', '--timeout')        #timeout for lost packets in  mill
 args = parser.parse_args()
 
 retrans = 0
+trans = 0
 
 sequence = 1
 length = int(args.length)
@@ -34,7 +35,11 @@ senip = socket.gethostbyname(socket.gethostname())
 soc = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 soc.bind((senip, int(args.port)))
 
-req_packet, req_addr = soc.recvfrom(65565)
+req_packet, disc_addr = soc.recvfrom(65565)
+
+req_header = struct.unpack("!B4sH4sHI", req_packet[0:17])
+
+req_addr = (socket.inet_ntoa(req_header[1]), int(req_header[2]))
 
 inner_header = struct.unpack("!cII", req_packet[17:26])
 
@@ -71,6 +76,7 @@ def retransmit(window, window_size):
 
         if data_buffer[window * window_size + i][1] == 0:
             global retrans 
+            global trans
             retrans += 1
 
             data = data_buffer[window * window_size + i][0]
@@ -78,10 +84,11 @@ def retransmit(window, window_size):
             inner_header = struct.pack("!cII", 'D'.encode(), socket.htonl(window * window_size + i + 1), len(data))
             inner_packet = inner_header + data
                     
-            outer_header = struct.pack("!B4sH4sHI", int(args.priority), socket.inet_aton(senip), int(args.port), socket.inet_aton(socket.gethostbyname(args.f_hostname)), int(args.f_port), len(inner_packet))
+            outer_header = struct.pack("!B4sH4sHI", int(args.priority), socket.inet_aton(senip), int(args.port), socket.inet_aton(req_addr[0]), req_addr[1], len(inner_packet))
             packet = outer_header + inner_packet
 
             soc.sendto(packet, (socket.gethostbyname(args.f_hostname), int(args.f_port)) )
+            trans += 1
             print(window)
 
     return
@@ -93,7 +100,9 @@ def proc_ack(window, window_size):
             soc.settimeout(round(int(args.timeout) / 1000))
             ack_packet, ack_addr = soc.recvfrom(65565)
             inner_header = struct.unpack("!cII", ack_packet[17:26])
+            
 
+            print(inner_header[0])
             if inner_header[0].decode() == 'A':
                 data_buffer[socket.ntohl(inner_header[1])-1] = (data_buffer[socket.ntohl(inner_header[1])-1][0], 1, 0)
 
@@ -102,6 +111,8 @@ def proc_ack(window, window_size):
                     
         except:
             retransmit(window, window_size)
+            if check_done(window, window_size):
+                return
 done = 1
 window = 0
 window_size = inner_header[2]
@@ -116,11 +127,12 @@ while done:
         inner_header = struct.pack("!cII", 'D'.encode(), socket.htonl(sequence), len(data))
         inner_packet = inner_header + data
         
-        outer_header = struct.pack("!B4sH4sHI", int(args.priority), socket.inet_aton(senip), int(args.port), socket.inet_aton(socket.gethostbyname(args.f_hostname)), int(args.f_port), len(inner_packet))
+        outer_header = struct.pack("!B4sH4sHI", int(args.priority), socket.inet_aton(senip), int(args.port), socket.inet_aton(req_addr[0]), req_addr[1], len(inner_packet))
         packet = outer_header + inner_packet
 
 
         soc.sendto(packet, (socket.gethostbyname(args.f_hostname), int(args.f_port)) )
+        trans += 1
         sequence += 1
 
         time.sleep(1/int(args.rate))
@@ -136,8 +148,11 @@ while done:
 
 inner_header = struct.pack("!cII", 'E'.encode(), socket.htonl(sequence), 0)
     
-outer_header = struct.pack("!B4sH4sHI", int(args.priority), socket.inet_aton(senip), int(args.port), socket.inet_aton(socket.gethostbyname(args.f_hostname)), int(args.f_port), len(inner_packet))
+outer_header = struct.pack("!B4sH4sHI", int(args.priority), socket.inet_aton(senip), int(args.port), socket.inet_aton(req_addr[0]), req_addr[1], len(inner_packet))
 packet = outer_header + inner_header
 
-soc.sendto(packet, (socket.gethostbyname(args.f_hostname), int(args.f_port)) )
+soc.sendto(packet, (socket.gethostbyname(args.f_hostname), int(args.f_port)))
+trans += 1
+
+print("Loss Rate:", int(retrans/trans * 100), "%")
 
