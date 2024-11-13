@@ -32,9 +32,19 @@ def getmilli():
     return round(time.time() * 1000)
 
 def log(cause, packet):
-    f = open(args.log, "a+")
-    string = cause + "\n"
+    outer_header = struct.unpack("!B4sH4sHI", packet[0:17])
+    inner_header = struct.unpack("!cII", packet[17:26])
 
+
+    srcport = str(outer_header[2])
+    destport = str(outer_header[4])
+    priority = str(outer_header[0])
+    payload = str(outer_header[5])
+
+
+
+    f = open(args.log, "a+")
+    string =  "Cause:      " + cause + "\n" + "Source:     " + socket.gethostbyaddr(socket.inet_ntoa(outer_header[1]))[0].removesuffix(".cs.wisc.edu") + ":" + srcport + "\n" + "Dest:       " + socket.gethostbyaddr(socket.inet_ntoa(outer_header[3]))[0].removesuffix(".cs.wisc.edu") + ":" + destport + "\n" + "PckType:    " + inner_header[0].decode() + "\n" + "Time:       " + datetime.now().isoformat(sep=" ", timespec="milliseconds") + "\n" +"Priority:   " + priority + "\n" +"Payload:    " + payload + "\n\n"
     f.write(string)
     f.close()
 
@@ -67,6 +77,7 @@ while 1:
                         #Packet, next hop ip, next hop port, send at
                         hig_q.put((incoming_packet, entry[4], entry[5], entry[6], 0, entry[7]), block=False)
                     error = 0
+                    break
 
                 elif int(incoming_header[0] == 2):
                     if med_q.full():
@@ -74,6 +85,7 @@ while 1:
                     else:
                         med_q.put((incoming_packet, entry[4], entry[5], entry[6], 0, entry[7]), block=False)
                     error = 0
+                    break
 
                 else:
                     if low_q.full():
@@ -81,6 +93,7 @@ while 1:
                     else: 
                         low_q.put((incoming_packet, entry[4], entry[5], entry[6], 0, entry[7]), block=False)
                     error = 0
+                    break
                     
         if error:
             log("No forwarding entry found", incoming_packet)
@@ -91,14 +104,12 @@ while 1:
             if int(cur_packet[4]) < getmilli():
 
                 inner_header = struct.unpack("!cII", cur_packet[0][17:26])
-                print(inner_header[0].decode())
                 if inner_header[0].decode() != "E" and inner_header[0].decode() != "R":
                     r = random.randint(0, 100)
                     if 0 < r < int(cur_packet[5]):
                         log("Loss event occurred", cur_packet[0])
                         cur_packet = -1
                         continue;
-            
                 soc.sendto(cur_packet[0], (socket.gethostbyname(cur_packet[1]), int(cur_packet[2])))
                 cur_packet = -1
 

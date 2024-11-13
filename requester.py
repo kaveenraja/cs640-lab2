@@ -49,16 +49,13 @@ def proc_req(packet, filename, hostname, port):
             continue
         
 
-        inner_packet = sen_packet[17:26]
+        inner_packet = sen_packet[17:]
         udp_header = struct.unpack("!cII", inner_packet[0:9])
         sequence = socket.ntohl(udp_header[1])
 
         if udp_header[0].decode() == 'E':
             break
-       
-        
-        data_buffer.append((sequence-1, inner_packet[9:9 + udp_header[2]].decode()))
-   
+
         # Send ack packet
         ack_inner_header = struct.pack("!cII", 'A'.encode(), udp_header[1], 0)
         ack_inner_packet = ack_inner_header
@@ -68,6 +65,9 @@ def proc_req(packet, filename, hostname, port):
 
         soc.sendto(ack_outer_packet, (socket.gethostbyname(args.f_hostname), int(args.f_port)) )
 
+        data_buffer.append((sequence-1, inner_packet[9:9 + udp_header[2]].decode()))
+   
+        
     f = open(filename, "a+")
 
     for i in range(len(data_buffer)):

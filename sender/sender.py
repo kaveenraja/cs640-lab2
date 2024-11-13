@@ -89,7 +89,7 @@ def retransmit(window, window_size):
 
             soc.sendto(packet, (socket.gethostbyname(args.f_hostname), int(args.f_port)) )
             trans += 1
-            print(window)
+            time.sleep(1/int(args.rate))
 
     return
 
@@ -102,7 +102,6 @@ def proc_ack(window, window_size):
             inner_header = struct.unpack("!cII", ack_packet[17:26])
             
 
-            print(inner_header[0])
             if inner_header[0].decode() == 'A':
                 data_buffer[socket.ntohl(inner_header[1])-1] = (data_buffer[socket.ntohl(inner_header[1])-1][0], 1, 0)
 
@@ -148,7 +147,7 @@ while done:
 
 inner_header = struct.pack("!cII", 'E'.encode(), socket.htonl(sequence), 0)
     
-outer_header = struct.pack("!B4sH4sHI", int(args.priority), socket.inet_aton(senip), int(args.port), socket.inet_aton(req_addr[0]), req_addr[1], len(inner_packet))
+outer_header = struct.pack("!B4sH4sHI", int(args.priority), socket.inet_aton(senip), int(args.port), socket.inet_aton(req_addr[0]), req_addr[1], len(inner_header))
 packet = outer_header + inner_header
 
 soc.sendto(packet, (socket.gethostbyname(args.f_hostname), int(args.f_port)))
